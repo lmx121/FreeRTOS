@@ -1,0 +1,89 @@
+/*
+ * SPDX-FileCopyrightText: 2010-2022 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: CC0-1.0
+ */
+
+#include <stdio.h>
+#include <inttypes.h>
+#include "sdkconfig.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_chip_info.h"
+#include "esp_flash.h"
+#include "hellow.h"
+#include "esp_task_wdt.h"
+
+#include "freertos/queue.h"
+
+typedef struct A_STRUCT
+{
+    char id;
+    char data;
+} xSTRUCT;
+
+void sendtask(void *pvParam)
+{
+    BaseType_t xStatus;
+    QueueHandle_t QHandle;
+    QHandle = (QueueHandle_t)pvParam;
+    xSTRUCT xUSB = {1, 55};
+    while (1)
+    {
+        xStatus = xQueueSend(QHandle, &xUSB, 0);
+        if (xStatus != pdPASS)
+        {
+            printf("send fail\n");
+        }
+        else
+        {
+            printf("send successfully\n");
+        }
+        xUSB.id++;
+        if (xUSB.id == 8)
+            xUSB.id = 0;
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+}
+
+void rectask(void *pvParam)
+{
+    BaseType_t xStatus;
+    QueueHandle_t QHandle;
+    QHandle = (QueueHandle_t)pvParam;
+    xSTRUCT xUSB = {0,0};
+
+    while (1)
+    {
+        if (uxQueueMessagesWaiting(QHandle) != 0)
+        {
+            xStatus = xQueueReceive(QHandle, &xUSB, 0);
+            if (xStatus != pdPASS)
+                printf("REC fail\n");
+            else
+                printf("rec ID:%d, DATA:%d\n ", xUSB.id,xUSB.data);
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+        }
+        else
+        {
+            printf("no data\n");
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+        }
+    }
+}
+
+void app_main(void)
+{
+    QueueHandle_t QHandle;
+    QHandle = xQueueCreate(8, sizeof(xSTRUCT));
+    if (QHandle != NULL)
+    {
+        printf("Creat quene successfully\n");
+        xTaskCreate(sendtask, "sendtask", 102400, (void *)QHandle, 1, NULL);
+        xTaskCreate(rectask, "rectask", 102400, (void *)QHandle, 1, NULL);
+    }
+    else
+    {
+        printf("failed");
+    }
+}
